@@ -3,6 +3,7 @@ package com.fnasibov.transactional.inbox.outbox.starter.r2dbc.domain
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import org.springframework.context.SmartLifecycle
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Spring lifecycle adapter responsible for starting and stopping
@@ -21,8 +22,7 @@ class EventProcessorStarter(
     private val scope: CoroutineScope
 ) : SmartLifecycle {
 
-    @Volatile
-    private var running = false
+    private val started = AtomicBoolean(false)
 
     /**
      * Starts the event processing pipeline.
@@ -30,8 +30,11 @@ class EventProcessorStarter(
      * Invokes [EventProcessor.start] and marks the lifecycle as running.
      */
     override fun start() {
+        if (!started.compareAndSet(false, true)) {
+            return
+        }
+
         processor.start()
-        running = true
     }
 
     /**
@@ -44,13 +47,13 @@ class EventProcessorStarter(
      */
     override fun stop() {
         scope.cancel()
-        running = false
+        started.compareAndSet(true, false)
     }
 
     /**
      * Indicates whether the processor is currently running.
      */
-    override fun isRunning(): Boolean = running
+    override fun isRunning(): Boolean = started.get()
 
     /**
      * Indicates that the component should start automatically

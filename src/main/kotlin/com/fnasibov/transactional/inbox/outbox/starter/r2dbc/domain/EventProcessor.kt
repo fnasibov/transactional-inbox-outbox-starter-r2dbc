@@ -6,6 +6,7 @@ import com.fnasibov.transactional.inbox.outbox.starter.r2dbc.configuration.Trans
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Core orchestrator of the transactional event processing pipeline.
@@ -29,6 +30,8 @@ class EventProcessor(
     private val scope: CoroutineScope
 ) {
 
+    private val started = AtomicBoolean(false)
+
     /**
      * Internal buffer used to decouple polling and processing stages.
      *
@@ -51,6 +54,9 @@ class EventProcessor(
      * and processes events until the coroutine scope is cancelled.
      */
     fun start() {
+        if (!started.compareAndSet(false, true)) {
+            return
+        }
 
         // Start pollers for each event type
         handlers

@@ -12,6 +12,7 @@ import org.springframework.data.relational.core.query.Criteria.where
 import org.springframework.data.relational.core.query.Query
 import org.springframework.transaction.reactive.TransactionalOperator
 import reactor.core.publisher.Mono
+import java.time.Duration
 import java.time.ZonedDateTime
 import java.util.*
 
@@ -88,11 +89,20 @@ class BaseEventRepository(
         val selectIdsSql = """
         SELECT id
         FROM $tableName
-        WHERE status in (:statuses)
-          AND (
-              last_attempt_at IS NULL
-              OR last_attempt_at < :backoffTime
-          )
+        WHERE (
+            status in (:pollingStatuses)
+            AND (
+                last_attempt_at IS NULL
+                OR last_attempt_at < :backoffTime
+            )
+        )
+        OR (
+            status = :failedStatus
+            AND (
+                next_retry_at IS NULL
+                OR next_retry_at <= :now
+            )
+        )
         ORDER BY created_at ASC
         LIMIT :limit
         FOR UPDATE SKIP LOCKED
@@ -102,14 +112,17 @@ class BaseEventRepository(
         UPDATE $tableName
         SET status = 'PROCESSING',
             last_attempt_at = :now,
-            updated_at = :now
+            updated_at = :now,
+            next_retry_at = NULL
         WHERE id IN (:ids)
     """.trimIndent()
 
         return transactionalOperator.execute {
             template.databaseClient.sql(selectIdsSql)
-                .bind("statuses", listOf(EventStatus.PENDING.name, EventStatus.PROCESSING.name, EventStatus.FAILED.name))
+                .bind("pollingStatuses", listOf(EventStatus.PENDING.name, EventStatus.PROCESSING.name))
+                .bind("failedStatus", EventStatus.FAILED.name)
                 .bind("backoffTime", backoffTime)
+                .bind("now", now)
                 .bind("limit", batchSize)
                 .map { row, _ ->
                     row.get("id", UUID::class.java)!!
@@ -153,7 +166,8 @@ class BaseEventRepository(
         val sql = """
             UPDATE $tableName
             SET status = :status,
-                updated_at = :updatedAt
+                updated_at = :updatedAt,
+                next_retry_at = NULL
             WHERE id = :id
         """.trimIndent()
 
@@ -182,7 +196,8 @@ class BaseEventRepository(
         val sql = """
             UPDATE $tableName
             SET status = :status,
-                updated_at = :updatedAt
+                updated_at = :updatedAt,
+                next_retry_at = NULL
             WHERE id = :id
         """.trimIndent()
 
@@ -210,6 +225,8 @@ class BaseEventRepository(
         val tableName = getTableName(event.javaClass)
 
         val nextRetryCount = event.retryCount + 1
+        val now = ZonedDateTime.now()
+        val nextRetryAt = now.plus(Duration.ofMillis(properties.retry.initialDelayMs))
 
         val nextStatus =
             if (nextRetryCount < properties.retry.maxImmediateAttempts) {
@@ -218,19 +235,34 @@ class BaseEventRepository(
                 EventStatus.DEAD_LETTER
             }
 
+        val nextRetryAtUpdate =
+            if (nextStatus == EventStatus.FAILED) {
+                "next_retry_at = :nextRetryAt"
+            } else {
+                "next_retry_at = NULL"
+            }
+
         val sql = """
             UPDATE $tableName
             SET status = :status,
                 retry_count = :retryCount,
-                last_attempt_at = NOW(),
-                updated_at = NOW()
+                last_attempt_at = :now,
+                updated_at = :now,
+                $nextRetryAtUpdate
             WHERE id = :id
         """.trimIndent()
 
-        template.databaseClient.sql(sql)
+        var statement = template.databaseClient.sql(sql)
             .bind("status", nextStatus.name)
             .bind("retryCount", nextRetryCount)
+            .bind("now", now)
             .bind("id", event.id)
+
+        if (nextStatus == EventStatus.FAILED) {
+            statement = statement.bind("nextRetryAt", nextRetryAt)
+        }
+
+        statement
             .fetch()
             .rowsUpdated()
             .awaitSingle()

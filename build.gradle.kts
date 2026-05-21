@@ -1,6 +1,7 @@
 plugins {
 	kotlin("jvm") version "2.2.21"
 	kotlin("plugin.spring") version "2.2.21"
+	kotlin("kapt") version "2.2.21"
 	`java-library`
 	id("com.vanniktech.maven.publish") version "0.36.0"
 }
@@ -20,15 +21,18 @@ repositories {
 
 dependencies {
 	implementation(platform("org.springframework.boot:spring-boot-dependencies:4.0.6"))
+	kapt(platform("org.springframework.boot:spring-boot-dependencies:4.0.6"))
 	api("org.springframework.boot:spring-boot-autoconfigure")
 	api("org.springframework.boot:spring-boot-starter-data-r2dbc")
 	implementation("io.projectreactor.kotlin:reactor-kotlin-extensions")
 	implementation("io.github.oshai:kotlin-logging-jvm:8.0.02")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
-	annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
+	kapt("org.springframework.boot:spring-boot-configuration-processor")
+
 	testImplementation("org.springframework.boot:spring-boot-starter-r2dbc-test")
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+	testImplementation("io.mockk:mockk:1.14.9")
 	testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

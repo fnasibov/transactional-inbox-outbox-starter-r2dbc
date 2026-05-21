@@ -50,4 +50,9 @@ interface Event {
      * Timestamp of the latest processing attempt.
      */
     val lastAttemptAt: ZonedDateTime?
+
+    /**
+     * Timestamp when the event becomes eligible for retry.
+     */
+    val nextRetryAt: ZonedDateTime?
 }

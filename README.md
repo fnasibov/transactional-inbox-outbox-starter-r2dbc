@@ -25,7 +25,8 @@ data class PaymentEvent(
     override val createdAt: ZonedDateTime,
     override val updatedAt: ZonedDateTime?,
     override val retryCount: Int,
-    override val lastAttemptAt: ZonedDateTime?
+    override val lastAttemptAt: ZonedDateTime?,
+    override val nextRetryAt: ZonedDateTime?
 ) : Event
 ```
 
@@ -71,6 +72,7 @@ transactional:
 
   retry:
     maxImmediateAttempts: 3
+    initialDelayMs: 1000
 ```
 
 ---

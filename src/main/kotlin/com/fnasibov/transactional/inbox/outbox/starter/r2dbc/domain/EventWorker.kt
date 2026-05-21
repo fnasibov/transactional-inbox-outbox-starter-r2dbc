@@ -47,6 +47,7 @@ class EventWorker(
      *
      * Number of concurrent workers is defined by configuration.
      */
+    @Suppress("UNCHECKED_CAST")
     fun start() {
         repeat(properties.processing.concurrency) {
             scope.launch {
@@ -69,9 +70,7 @@ class EventWorker(
 
                         repository.markAsDeadLetter(event)
 
-                        handlers.forEach {
-                            (it as EventHandler<Event>).handleDeadLetter(event, e)
-                        }
+                        handleDeadLetterSafely(event, handlers, e)
 
                     } catch (e: Throwable) {
                         log.error(e) {
@@ -81,9 +80,7 @@ class EventWorker(
                         val status = repository.markAsFailed(event)
 
                         if (status == EventStatus.DEAD_LETTER) {
-                            handlers.forEach {
-                                (it as EventHandler<Event>).handleDeadLetter(event, e)
-                            }
+                            handleDeadLetterSafely(event, handlers, e)
                         }
                     }
                 }
@@ -102,5 +99,24 @@ class EventWorker(
             ?: throw HandlerNotFoundException(
                 "No handler registered for ${event.javaClass.simpleName}"
             )
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private suspend fun handleDeadLetterSafely(
+        event: Event,
+        handlers: List<EventHandler<out Event>>,
+        error: Throwable
+    ) {
+        handlers.forEach { handler ->
+            try {
+                (handler as EventHandler<Event>).handleDeadLetter(event, error)
+            } catch (deadLetterError: CancellationException) {
+                throw deadLetterError
+            } catch (deadLetterError: Throwable) {
+                log.error(deadLetterError) {
+                    "Dead-letter handler failed for ${event.javaClass.simpleName}"
+                }
+            }
+        }
     }
 }
