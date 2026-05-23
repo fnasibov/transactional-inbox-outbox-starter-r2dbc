@@ -138,6 +138,9 @@ transactional:
     # Internal channel capacity between pollers and workers.
     channel-capacity: 25
 
+    # Time after which PROCESSING events are considered stale and eligible again.
+    processing-stale-timeout: 5m
+
   processing:
     # Number of worker coroutines consuming events from the shared channel.
     concurrency: 5
@@ -164,6 +167,7 @@ Defaults:
 | `transactional.polling.max-idle-interval` | `30s` |
 | `transactional.polling.batch-size` | `15` |
 | `transactional.polling.channel-capacity` | `25` |
+| `transactional.polling.processing-stale-timeout` | `5m` |
 | `transactional.processing.concurrency` | `5` |
 | `transactional.processing.shutdown-timeout` | `30s` |
 | `transactional.retry.max-attempts` | `3` |
