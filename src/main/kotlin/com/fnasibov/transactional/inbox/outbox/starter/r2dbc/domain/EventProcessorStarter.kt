@@ -55,7 +55,7 @@ class EventProcessorStarter(
     override fun stop(callback: Runnable) {
         scope.launch {
             try {
-                processor.stop()
+                processor.stopGracefully()
                 scope.cancel()
                 started.compareAndSet(true, false)
             } finally {

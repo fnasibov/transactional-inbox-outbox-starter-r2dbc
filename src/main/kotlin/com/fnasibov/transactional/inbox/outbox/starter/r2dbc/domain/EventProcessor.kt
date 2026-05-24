@@ -5,8 +5,12 @@ import com.fnasibov.transactional.inbox.outbox.starter.r2dbc.api.model.Event
 import com.fnasibov.transactional.inbox.outbox.starter.r2dbc.configuration.TransactionalProperties
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -35,17 +39,7 @@ class EventProcessor(
     private val started = AtomicBoolean(false)
     private val pollerJobs = mutableListOf<Job>()
     private val workerJobs = mutableListOf<Job>()
-
-    /**
-     * Internal buffer used to decouple polling and processing stages.
-     *
-     * Capacity is configured via `transactional.polling.channel-capacity`.
-     * Overflow strategy is set to SUSPEND to ensure backpressure.
-     */
-    private val channel = Channel<Event>(
-        capacity = properties.polling.channelCapacity,
-        onBufferOverflow = BufferOverflow.SUSPEND
-    )
+    private var channel: Channel<Event>? = null
 
     /**
      * Starts the event processing pipeline.
@@ -62,6 +56,18 @@ class EventProcessor(
             return
         }
 
+        /*
+         * Internal buffer used to decouple polling and processing stages.
+         *
+         * Capacity is configured via `transactional.polling.channel-capacity`.
+         * Overflow strategy is set to SUSPEND to ensure backpressure.
+         */
+        val processingChannel = Channel<Event>(
+            capacity = properties.polling.channelCapacity,
+            onBufferOverflow = BufferOverflow.SUSPEND
+        )
+        channel = processingChannel
+
         // Start pollers for each event type
         val pollers = handlers
             .map { (eventType, _) -> eventType }
@@ -71,7 +77,7 @@ class EventProcessor(
                     eventType = eventType,
                     repository = repository,
                     properties = properties,
-                    channel = channel,
+                    channel = processingChannel,
                     scope = scope,
                     metrics = metrics
                 )
@@ -83,18 +89,34 @@ class EventProcessor(
             handlers = handlers,
             repository = repository,
             properties = properties,
-            channel = channel,
+            channel = processingChannel,
             scope = scope,
             metrics = metrics
         ).start()
     }
 
-    fun stop() {
-        pollerJobs.forEach { it.cancel() }
-        channel.close()
-        workerJobs.forEach { it.cancel() }
+    fun stop() = runBlocking {
+        stopGracefully()
+    }
+
+    suspend fun stopGracefully() {
+        if (!started.compareAndSet(true, false)) {
+            return
+        }
+
+        pollerJobs.forEach { it.cancelAndJoin() }
+        channel?.close()
+
+        val drained = withTimeoutOrNull(properties.processing.shutdownTimeout.toMillis()) {
+            workerJobs.joinAll()
+        } != null
+
+        if (!drained) {
+            workerJobs.forEach { it.cancelAndJoin() }
+        }
+
         pollerJobs.clear()
         workerJobs.clear()
-        started.compareAndSet(true, false)
+        channel = null
     }
 }
