@@ -126,6 +126,36 @@ transactional:
 
 When enabled, auto-configuration creates the repository, processor, coroutine scope, and lifecycle starter. Processing starts with the Spring application.
 
+## Demo
+
+A standalone Spring Boot demo application is available in `transactional-inbox-outbox-demo`.
+
+Start PostgreSQL:
+
+```shell
+docker compose -f transactional-inbox-outbox-demo/docker-compose.yml up -d
+```
+
+Run it from the repository root on Windows:
+
+```powershell
+.\gradlew.bat :transactional-inbox-outbox-demo:bootRun
+```
+
+Run it from the repository root on macOS/Linux:
+
+```shell
+./gradlew :transactional-inbox-outbox-demo:bootRun
+```
+
+Create a new pending demo event:
+
+```shell
+curl -X POST http://localhost:8080/demo-events \
+  -H "Content-Type: application/json" \
+  -d '{"payload":"Hello from HTTP","priority":25}'
+```
+
 ## Configuration
 
 All properties live under the `transactional` prefix.

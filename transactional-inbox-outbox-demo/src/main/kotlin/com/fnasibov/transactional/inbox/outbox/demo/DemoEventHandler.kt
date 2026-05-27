@@ -1,0 +1,27 @@
+package com.fnasibov.transactional.inbox.outbox.demo
+
+import com.fnasibov.transactional.inbox.outbox.starter.r2dbc.api.EventHandler
+import org.slf4j.LoggerFactory
+import org.springframework.stereotype.Component
+
+@Component
+class DemoEventHandler : EventHandler<DemoEvent> {
+
+    private val logger = LoggerFactory.getLogger(javaClass)
+
+    override fun supportedEventType(): Class<DemoEvent> =
+        DemoEvent::class.java
+
+    override suspend fun handle(event: DemoEvent) {
+        logger.info(
+            "Handled demo event id={} priority={} payload={}",
+            event.id,
+            event.priority,
+            event.payload
+        )
+    }
+
+    override suspend fun handleDeadLetter(event: DemoEvent, error: Throwable) {
+        logger.error("Demo event moved to dead letter id={}", event.id, error)
+    }
+}

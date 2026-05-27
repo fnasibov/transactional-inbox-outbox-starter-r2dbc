@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: transactional-inbox-outbox-demo
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/transactional_demo
+    username: demo
+    password: demo
+  sql:
+    init:
+      mode: always
+
+transactional:
+  enabled: true
+  polling:
+    active-interval: 250ms
+    max-idle-interval: 2s
+    batch-size: 5
+  processing:
+    concurrency: 1
+    shutdown-timeout: 5s
+  retry:
+    max-attempts: 3
